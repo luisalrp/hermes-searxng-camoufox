@@ -14,6 +14,15 @@ This keeps web work auditable, cheaper, and less exposed to prompt-injection hid
 pages. The Hermes skill that encodes this policy lives in
 [`skills/searxng-firecrawl-camofox/SKILL.md`](skills/searxng-firecrawl-camofox/SKILL.md).
 
+![Separate the web jobs — SearXNG for search, Firecrawl for extraction, Camofox for browsing](docs/separate-the-web-jobs.png)
+
+> **[@TheAhmadOsman](https://x.com/TheAhmadOsman/status/2066692532440797374) on X:** Running LLMs locally?
+> Give them web access — **SearXNG** for candidate source discovery, **Firecrawl** for known-URL scraping
+> and crawling, **Camofox** as the browser fallback when JS/interaction gets annoying.
+> *Search → Extract → Interact.*
+
+This repository is a ready-to-run implementation of that setup (diagram from the same post).
+
 ## Components
 
 | Service | Image | Role | Port |
