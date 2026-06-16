@@ -1,5 +1,5 @@
 # ──────────────────────────────────────────────────────────────────────────
-# Hermes + SearXNG + Camoufox — Coolify deployment variant
+# Hermes + SearXNG + Camofox — Coolify deployment variant
 #
 # This relies on Coolify features instead of published ports:
 #   - SERVICE_URL_SEARXNG_8080 and SERVICE_HEX_64_SEARXNG are Coolify "magic"
@@ -65,10 +65,9 @@ services:
       interval: 5s
       timeout: 5s
       retries: 5
-  # Stealth browser backend. The image (jo-inc/camofox-browser) and the CAMOFOX_*
-  # variables are upstream literals spelled without "u"; the service/volume name
-  # uses the correct engine spelling "camoufox".
-  camoufox:
+  # Stealth browser backend: jo-inc/camofox-browser, powered by the Camoufox engine.
+  # "camofox" (no "u") is the upstream spelling — image, CAMOFOX_* vars, service/volume.
+  camofox:
     image: 'ghcr.io/jo-inc/camofox-browser:${CAMOFOX_IMAGE_TAG:-latest}'
     restart: unless-stopped
     expose:
@@ -87,7 +86,7 @@ services:
       - 'CAMOFOX_CRASH_REPORT_ENABLED=${CAMOFOX_CRASH_REPORT_ENABLED:-false}'
       - ENABLE_VNC=0
     volumes:
-      - 'camoufox-data:/root/.camofox'
+      - 'camofox-data:/root/.camofox'
     shm_size: 1gb
     healthcheck:
       test:
@@ -115,7 +114,7 @@ services:
       - HERMES_STREAM_READ_TIMEOUT=1800
       # Tool wiring. SEARXNG_URL / CAMOFOX_URL are the exact upstream env names.
       - 'SEARXNG_URL=http://searxng:8080'
-      - 'CAMOFOX_URL=http://camoufox:9377'
+      - 'CAMOFOX_URL=http://camofox:9377'
     shm_size: 1gb
     healthcheck:
       test:
@@ -156,6 +155,6 @@ services:
       - traefik.http.middlewares.authentik-auth@file
 volumes:
   hermes-data: null
-  camoufox-data: null
+  camofox-data: null
   searxng-cache: null
   valkey-data: null
