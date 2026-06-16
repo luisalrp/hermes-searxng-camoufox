@@ -1,4 +1,4 @@
-# Hermes + SearXNG + Camoufox
+# Hermes + SearXNG + Camofox
 
 A self-hostable web-research stack for the [Hermes Agent](https://github.com/NousResearch/hermes-agent),
 built around one idea: **don't "browse the internet" as a single habit — split web work into
@@ -6,13 +6,13 @@ discovery, extraction, and interaction.**
 
 1. **Search** with [SearXNG](https://github.com/searxng/searxng) — cheap discovery of candidate URLs.
 2. **Extract** with [Firecrawl](https://github.com/firecrawl/firecrawl) — turn known URLs into clean markdown.
-3. **Browse** with **Camoufox** (the stealth Firefox fork, served by
-   [`jo-inc/camofox-browser`](https://github.com/jo-inc/camofox-browser)) — only when JavaScript,
+3. **Browse** with **Camofox** ([`jo-inc/camofox-browser`](https://github.com/jo-inc/camofox-browser),
+   an anti-detection server powered by the **Camoufox** engine) — only when JavaScript,
    clicks, or auth state are genuinely required.
 
 This keeps web work auditable, cheaper, and less exposed to prompt-injection hidden inside arbitrary
 pages. The Hermes skill that encodes this policy lives in
-[`skills/searxng-firecrawl-camoufox/SKILL.md`](skills/searxng-firecrawl-camoufox/SKILL.md).
+[`skills/searxng-firecrawl-camofox/SKILL.md`](skills/searxng-firecrawl-camofox/SKILL.md).
 
 ## Components
 
@@ -22,12 +22,12 @@ pages. The Hermes skill that encodes this policy lives in
 | **hermes-dashboard** | `nousresearch/hermes-agent` | Web dashboard / triage UI | 9119 |
 | **searxng** | `searxng/searxng` | Metasearch — the *search* layer | 8080 |
 | **valkey** | `valkey/valkey` | Cache/queue for SearXNG (Redis fork) | 6379 |
-| **camoufox** | `ghcr.io/jo-inc/camofox-browser` | Stealth browser automation — the *browse* layer | 9377 |
+| **camofox** | `ghcr.io/jo-inc/camofox-browser` | Stealth browser automation — the *browse* layer | 9377 |
 
-> **On the spelling:** the browser engine is **Camoufox** (with a "u"). The upstream Docker image
-> (`jo-inc/camofox-browser`) and its environment variables (`CAMOFOX_*`) are spelled **without** the
-> "u" — that is the maintainer's literal naming, so this repo keeps those identifiers verbatim while
-> using "Camoufox" everywhere else.
+> **On the spelling:** the browser *engine* is **Camoufox** (with a "u", by daijro). jo-inc's server
+> and the Hermes provider drop the "u" — **Camofox** — as does every identifier
+> (`jo-inc/camofox-browser`, `CAMOFOX_*`, `browser.camofox`, `CAMOFOX_URL`). This repo uses **Camofox**
+> throughout and reserves **Camoufox** for the underlying engine.
 
 > **Firecrawl is not bundled.** Hermes' `web_extract` defaults to Firecrawl, which this compose does
 > not run. See [Wiring & gaps](#wiring--gaps).
@@ -63,8 +63,8 @@ Verify:
 # SearXNG returns JSON (not 403) — confirms the json format is enabled
 curl -s "http://localhost:8080/search?q=test&format=json" | head
 
-# Camoufox health
-docker compose exec camoufox curl -fsS http://127.0.0.1:9377/health
+# Camofox health
+docker compose exec camofox curl -fsS http://127.0.0.1:9377/health
 
 # Hermes dashboard
 open http://localhost:9119
@@ -78,7 +78,7 @@ All settings live in `.env` (see `.env.example` for the full list with comments)
 |---|---|
 | `SEARXNG_SECRET` | **Required.** SearXNG secret key (`openssl rand -hex 32`). |
 | `HERMES_API_SERVER_KEY` | **Required.** Auth key for the Hermes API server. |
-| `CAMOFOX_IMAGE_TAG` | Browser image tag — pin a real one from the [releases](https://github.com/jo-inc/camofox-browser/releases) (tags are arch-suffixed). |
+| `CAMOFOX_IMAGE_TAG` | Browser image tag. Published GHCR tags are app semver (e.g. `1.11.2`) or `latest`, multi-arch (amd64/arm64). Pin a version for reproducibility. |
 | `SEARXNG_PORT` / `HERMES_API_PORT` | Host ports for the generic compose. |
 
 ### Hermes tool wiring
@@ -87,7 +87,7 @@ The generic compose wires Hermes to the in-network services:
 
 ```yaml
 SEARXNG_URL=http://searxng:8080      # search backend
-CAMOFOX_URL=http://camoufox:9377     # browser backend (env name is an upstream literal)
+CAMOFOX_URL=http://camofox:9377     # browser backend (env name is an upstream literal)
 ```
 
 To make SearXNG the default search backend (Hermes defaults to Firecrawl), set it in your Hermes
@@ -113,13 +113,15 @@ This stack is explicit about what it does and does not include:
   OpenAI-compatible / Ollama endpoint) and set the provider variables your Hermes version expects
   per the [docs](https://hermes-agent.nousresearch.com/docs/user-guide/configuration). Commented
   placeholders are in `docker-compose.yml` and `.env.example`.
-- **Pin the Camoufox image tag** — `latest` may not resolve on GHCR; tags are arch-suffixed (e.g. `135.0.1-aarch64`).
+- **Camofox auth: leave `CAMOFOX_ACCESS_KEY` unset here.** Hermes calls Camofox's REST API unauthenticated (it only reads `CAMOFOX_URL`), so a global access key would reject every browser call. This compose keeps Camofox on the internal network only (not published to the host). `CAMOFOX_API_KEY` (cookie import) and `CAMOFOX_ADMIN_KEY` (`/stop`) are separate and safe to set.
+- **Pin the image tag for Hermes compatibility.** `ghcr.io/jo-inc/camofox-browser` publishes multi-arch app-semver tags (e.g. `1.11.2`) plus `latest`; pin a version so the Camofox API/persistence behaviour Hermes relies on doesn't drift. (The `135.0.1-<arch>` form is only the local `make` build tag, not a GHCR tag.)
+- **Persistent browser sessions** need `browser.camofox.managed_persistence: true` in Hermes' `config.yaml` (note: `camofox`, no "u") **and** a Camofox build that honours per-`userId` profiles — see [`hermes/config.example.yaml`](hermes/config.example.yaml).
 
 ## The skill
 
-[`skills/searxng-firecrawl-camoufox/SKILL.md`](skills/searxng-firecrawl-camoufox/SKILL.md) is a Hermes
+[`skills/searxng-firecrawl-camofox/SKILL.md`](skills/searxng-firecrawl-camofox/SKILL.md) is a Hermes
 skill that teaches the agent the **search → extract → browse** escalation policy: SearXNG first,
-Firecrawl for known URLs, and Camoufox only when a real browser is unavoidable. Drop it into your
+Firecrawl for known URLs, and Camofox only when a real browser is unavoidable. Drop it into your
 Hermes skills directory.
 
 ## Deploying on Coolify
@@ -146,6 +148,6 @@ Use `docker-compose.coolify.yml`. It relies on Coolify features instead of publi
 
 [Hermes Agent](https://github.com/NousResearch/hermes-agent) ·
 [SearXNG](https://github.com/searxng/searxng) ·
-[camofox-browser](https://github.com/jo-inc/camofox-browser) (Camoufox) ·
+[camofox-browser](https://github.com/jo-inc/camofox-browser) · [Camoufox engine](https://camoufox.com) ·
 [Firecrawl](https://github.com/firecrawl/firecrawl) ·
 [Valkey](https://github.com/valkey-io/valkey)

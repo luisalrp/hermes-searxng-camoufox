@@ -10,5 +10,13 @@ web:
   extract_backend: "firecrawl"  # used by web_extract  -> needs Firecrawl (NOT bundled);
                                 # alternatives: tavily | exa | parallel
 
-# Browser automation routes through Camoufox automatically when CAMOFOX_URL is set
-# (see docker-compose.yml / .env). No extra config is required here for the browser tool.
+# Browser automation routes through Camofox automatically when CAMOFOX_URL is set
+# (see docker-compose.yml / .env). No extra config is required for basic browsing.
+#
+# To persist browser sessions (logins/cookies) across restarts, enable managed
+# persistence. NOTE: the config key is "browser.camofox" — an upstream literal
+# spelled WITHOUT the "u" (Hermes reads browser.camofox, not browser.camoufox).
+# It also requires a Camofox build that honours per-userId profiles.
+browser:
+  camofox:
+    managed_persistence: true

@@ -1,5 +1,5 @@
 # ──────────────────────────────────────────────────────────────────────────
-# Hermes + SearXNG + Camoufox — generic / portable stack
+# Hermes + SearXNG + Camofox — generic / portable stack
 # Works with a plain `docker compose up -d`. Copy .env.example to .env first.
 # For Coolify deployments use docker-compose.coolify.yml instead.
 # ──────────────────────────────────────────────────────────────────────────
@@ -56,10 +56,9 @@ services:
       timeout: 5s
       retries: 5
 
-  # Stealth browser backend. The image (jo-inc/camofox-browser) and the CAMOFOX_*
-  # variables are upstream literals spelled without "u"; the service/volume name
-  # uses the correct engine spelling "camoufox".
-  camoufox:
+  # Stealth browser backend: jo-inc/camofox-browser, powered by the Camoufox engine.
+  # "camofox" (no "u") is the upstream spelling — image, CAMOFOX_* vars, service/volume.
+  camofox:
     image: 'ghcr.io/jo-inc/camofox-browser:${CAMOFOX_IMAGE_TAG:-latest}'
     restart: unless-stopped
     expose:
@@ -78,7 +77,7 @@ services:
       - 'CAMOFOX_CRASH_REPORT_ENABLED=${CAMOFOX_CRASH_REPORT_ENABLED:-false}'
       - ENABLE_VNC=0
     volumes:
-      - 'camoufox-data:/root/.camofox'
+      - 'camofox-data:/root/.camofox'
     shm_size: 1gb
     healthcheck:
       test:
@@ -96,7 +95,7 @@ services:
     depends_on:
       searxng:
         condition: service_healthy
-      camoufox:
+      camofox:
         condition: service_healthy
     ports:
       - '${HERMES_API_PORT:-8642}:8642'
@@ -115,7 +114,7 @@ services:
       - HERMES_STREAM_READ_TIMEOUT=1800
       # Tool wiring. SEARXNG_URL / CAMOFOX_URL are the exact upstream env names.
       - 'SEARXNG_URL=http://searxng:8080'
-      - 'CAMOFOX_URL=http://camoufox:9377'
+      - 'CAMOFOX_URL=http://camofox:9377'
       # web_extract uses Firecrawl by default (not bundled). Self-host it, then uncomment:
       # - 'FIRECRAWL_API_URL=${FIRECRAWL_API_URL:-}'
       # LLM provider — Hermes needs one (NOT bundled). Bring your own: a cloud API or an
@@ -163,6 +162,6 @@ services:
 
 volumes:
   hermes-data:
-  camoufox-data:
+  camofox-data:
   searxng-cache:
   valkey-data:
