@@ -1,0 +1,20 @@
+# SearXNG limiter / bot detection — https://docs.searxng.org/admin/searx.limiter.html
+# Only enforced when server.limiter = true in searxng-settings.yml.
+[botdetection]
+ipv4_prefix = 32
+ipv6_prefix = 48
+# CIDRs of your reverse proxy so the real client IP is read from
+# X-Forwarded-For / X-Real-IP instead of the proxy's address.
+trusted_proxies = [
+  "127.0.0.0/8",
+  "::1",
+]
+
+[botdetection.ip_limit]
+filter_link_local = false
+# link_token requires a Valkey/Redis DB; enable for stronger bot protection.
+link_token = false
+
+[botdetection.ip_lists]
+block_ip = []
+pass_ip = []

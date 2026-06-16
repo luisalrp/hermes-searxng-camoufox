@@ -1,0 +1,24 @@
+# SearXNG settings — https://docs.searxng.org/admin/settings/index.html
+# use_default_settings: true means only the keys below override SearXNG's
+# built-in defaults; everything else falls back to upstream defaults.
+use_default_settings: true
+
+general:
+  instance_name: "SearXNG"
+
+server:
+  # Replaced at container start by the SEARXNG_SECRET environment variable.
+  secret_key: "ultrasecretkey"
+  # Internal instance behind the Hermes network. If you expose this publicly,
+  # set this to true and configure limiter.toml.
+  limiter: false
+  image_proxy: true
+
+search:
+  safe_search: 1
+  autocomplete: "duckduckgo"
+  formats:
+    - html
+    # REQUIRED for API clients (Hermes web_search). Without "json",
+    # any ?format=json request returns HTTP 403.
+    - json

@@ -1,0 +1,168 @@
+# ──────────────────────────────────────────────────────────────────────────
+# Hermes + SearXNG + Camoufox — generic / portable stack
+# Works with a plain `docker compose up -d`. Copy .env.example to .env first.
+# For Coolify deployments use docker-compose.coolify.yml instead.
+# ──────────────────────────────────────────────────────────────────────────
+services:
+  searxng:
+    image: 'docker.io/searxng/searxng:${SEARXNG_VERSION:-latest}'
+    restart: unless-stopped
+    depends_on:
+      valkey:
+        condition: service_healthy
+    ports:
+      - '${SEARXNG_PORT:-8080}:8080'
+    environment:
+      - SEARXNG_PORT=8080
+      - SEARXNG_BIND_ADDRESS=0.0.0.0
+      - 'SEARXNG_BASE_URL=${SEARXNG_BASE_URL:-http://localhost:8080}'
+      - 'SEARXNG_SECRET=${SEARXNG_SECRET:?Generate with: openssl rand -hex 32}'
+      - 'SEARXNG_VALKEY_URL=valkey://valkey:6379/0'
+      - SEARXNG_LIMITER=false
+      - SEARXNG_PUBLIC_INSTANCE=false
+      - SEARXNG_IMAGE_PROXY=true
+      - FORCE_OWNERSHIP=true
+    volumes:
+      - 'searxng-cache:/var/cache/searxng'
+      - type: bind
+        source: ./searxng-settings.yml
+        target: /etc/searxng/settings.yml
+      - type: bind
+        source: ./searxng-limiter.toml
+        target: /etc/searxng/limiter.toml
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - 'wget -q --spider http://127.0.0.1:8080/healthz || exit 1'
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+  valkey:
+    image: 'docker.io/valkey/valkey:8-alpine'
+    restart: unless-stopped
+    command: 'valkey-server --save 30 1 --loglevel warning'
+    expose:
+      - '6379'
+    volumes:
+      - 'valkey-data:/data'
+    healthcheck:
+      test:
+        - CMD
+        - valkey-cli
+        - ping
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # Stealth browser backend. The image (jo-inc/camofox-browser) and the CAMOFOX_*
+  # variables are upstream literals spelled without "u"; the service/volume name
+  # uses the correct engine spelling "camoufox".
+  camoufox:
+    image: 'ghcr.io/jo-inc/camofox-browser:${CAMOFOX_IMAGE_TAG:-latest}'
+    restart: unless-stopped
+    expose:
+      - '9377'
+    environment:
+      - CAMOFOX_PORT=9377
+      - PORT=9377
+      - CAMOFOX_PROFILE_DIR=/root/.camofox/profiles
+      - CAMOFOX_COOKIES_DIR=/root/.camofox/cookies
+      - CAMOFOX_TRACES_DIR=/root/.camofox/traces
+      - 'MAX_OLD_SPACE_SIZE=${CAMOFOX_MAX_OLD_SPACE_SIZE:-1024}'
+      - 'MAX_SESSIONS=${CAMOFOX_MAX_SESSIONS:-10}'
+      - 'MAX_TABS_PER_SESSION=${CAMOFOX_MAX_TABS_PER_SESSION:-5}'
+      - 'SESSION_TIMEOUT_MS=${CAMOFOX_SESSION_TIMEOUT_MS:-1800000}'
+      - 'BROWSER_IDLE_TIMEOUT_MS=${CAMOFOX_BROWSER_IDLE_TIMEOUT_MS:-300000}'
+      - 'CAMOFOX_CRASH_REPORT_ENABLED=${CAMOFOX_CRASH_REPORT_ENABLED:-false}'
+      - ENABLE_VNC=0
+    volumes:
+      - 'camoufox-data:/root/.camofox'
+    shm_size: 1gb
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - 'curl -fsS http://127.0.0.1:9377/health >/dev/null || exit 1'
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 120s
+
+  hermes:
+    image: 'nousresearch/hermes-agent:${HERMES_VERSION:-latest}'
+    restart: unless-stopped
+    command: 'gateway run'
+    depends_on:
+      searxng:
+        condition: service_healthy
+      camoufox:
+        condition: service_healthy
+    ports:
+      - '${HERMES_API_PORT:-8642}:8642'
+    volumes:
+      - 'hermes-data:/opt/data'
+      # Opt-in: mount the example wiring as Hermes config (verify the path for
+      # your Hermes version before relying on it).
+      # - ./hermes/config.example.yaml:/opt/data/config.yaml:ro
+    environment:
+      - API_SERVER_ENABLED=true
+      - API_SERVER_HOST=0.0.0.0
+      - API_SERVER_PORT=8642
+      - 'API_SERVER_KEY=${HERMES_API_SERVER_KEY:?Set HERMES_API_SERVER_KEY in your .env}'
+      - API_SERVER_MODEL_NAME=hermes
+      - HERMES_API_TIMEOUT=1800
+      - HERMES_STREAM_READ_TIMEOUT=1800
+      # Tool wiring. SEARXNG_URL / CAMOFOX_URL are the exact upstream env names.
+      - 'SEARXNG_URL=http://searxng:8080'
+      - 'CAMOFOX_URL=http://camoufox:9377'
+      # web_extract uses Firecrawl by default (not bundled). Self-host it, then uncomment:
+      # - 'FIRECRAWL_API_URL=${FIRECRAWL_API_URL:-}'
+      # LLM provider — Hermes needs one (NOT bundled). Bring your own: a cloud API or an
+      # external OpenAI-compatible / Ollama endpoint. Set the variables your Hermes version
+      # expects (see the docs), e.g.:
+      # - 'OPENAI_BASE_URL=https://your-llm-endpoint/v1'
+      # - 'OPENAI_API_KEY=...'
+    shm_size: 1gb
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - 'python3 -c "import urllib.request; urllib.request.urlopen(''http://127.0.0.1:8642/health'', timeout=3).read()"'
+      interval: 30s
+      timeout: 5s
+      retries: 10
+      start_period: 90s
+    mem_limit: 4g
+    mem_reservation: 1g
+    cpus: '2.0'
+
+  hermes-dashboard:
+    image: 'nousresearch/hermes-agent:${HERMES_VERSION:-latest}'
+    restart: unless-stopped
+    command: 'dashboard --host 0.0.0.0 --port 9119 --no-open --insecure'
+    expose:
+      - '9119'
+    ports:
+      - '9119:9119'
+    volumes:
+      - 'hermes-data:/opt/data'
+    environment:
+      - 'GATEWAY_HEALTH_URL=http://hermes:8642'
+      - GATEWAY_HEALTH_TIMEOUT=5
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - 'python3 -c "import urllib.request; urllib.request.urlopen(''http://127.0.0.1:9119/api/status'', timeout=3).read()"'
+      interval: 30s
+      timeout: 5s
+      retries: 10
+      start_period: 60s
+    mem_limit: 512m
+    mem_reservation: 128m
+    cpus: '0.5'
+
+volumes:
+  hermes-data:
+  camoufox-data:
+  searxng-cache:
+  valkey-data:
