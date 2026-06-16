@@ -1,0 +1,14 @@
+# Secrets / local environment
+.env
+.env.*
+!.env.example
+
+# OS / editor cruft
+.DS_Store
+*.swp
+
+# Conductor / local tooling (do not publish)
+.context/
+.tldr/
+.tldrignore
+.claude/

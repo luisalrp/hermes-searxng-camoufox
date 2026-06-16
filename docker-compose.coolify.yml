@@ -1,0 +1,188 @@
+# ──────────────────────────────────────────────────────────────────────────
+# Hermes + SearXNG + Camoufox — Coolify deployment variant
+#
+# This relies on Coolify features instead of published ports:
+#   - SERVICE_URL_SEARXNG_8080 and SERVICE_HEX_64_SEARXNG are Coolify "magic"
+#     variables that Coolify generates for you (public URL + 64-char hex secret).
+#   - The Traefik/Authentik labels route services through Coolify's reverse proxy
+#     and SSO. Set HERMES_API_SERVER_KEY in the Coolify environment.
+#
+# For a normal `docker compose up` on any host, use docker-compose.yml instead.
+# ──────────────────────────────────────────────────────────────────────────
+services:
+  ollama:
+    image: 'ollama/ollama:${OLLAMA_VERSION:-latest}'
+    restart: unless-stopped
+    expose:
+      - '11434'
+    environment:
+      - 'OLLAMA_HOST=0.0.0.0:11434'
+      - 'OLLAMA_MODEL=${OLLAMA_MODEL:-gemma4:e4b}'
+      - 'OLLAMA_CONTEXT_LENGTH=${OLLAMA_CONTEXT_LENGTH:-32768}'
+      - OLLAMA_MAX_LOADED_MODELS=1
+      - OLLAMA_NUM_PARALLEL=1
+      - OLLAMA_KEEP_ALIVE=24h
+      - OLLAMA_NO_CLOUD=1
+    volumes:
+      - 'ollama-data:/root/.ollama'
+    healthcheck:
+      test:
+        - CMD
+        - ollama
+        - list
+      interval: 5s
+      timeout: 30s
+      retries: 10
+    mem_limit: '${OLLAMA_MEMORY_LIMIT:-16g}'
+    mem_reservation: 8g
+    cpus: '${OLLAMA_CPUS:-4.0}'
+  searxng:
+    image: 'docker.io/searxng/searxng:${SEARXNG_VERSION:-latest}'
+    restart: unless-stopped
+    depends_on:
+      valkey:
+        condition: service_healthy
+    expose:
+      - '8080'
+    environment:
+      - SERVICE_URL_SEARXNG_8080
+      - SEARXNG_PORT=8080
+      - SEARXNG_BIND_ADDRESS=0.0.0.0
+      - 'SEARXNG_BASE_URL=${SERVICE_URL_SEARXNG_8080}'
+      - 'SEARXNG_SECRET=${SERVICE_HEX_64_SEARXNG}'
+      - 'SEARXNG_VALKEY_URL=valkey://valkey:6379/0'
+      - SEARXNG_LIMITER=false
+      - SEARXNG_PUBLIC_INSTANCE=false
+      - SEARXNG_IMAGE_PROXY=true
+      - FORCE_OWNERSHIP=true
+    volumes:
+      - 'searxng-cache:/var/cache/searxng'
+      -
+        type: bind
+        source: ./searxng-settings.yml
+        target: /etc/searxng/settings.yml
+      -
+        type: bind
+        source: ./searxng-limiter.toml
+        target: /etc/searxng/limiter.toml
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - 'wget -q --spider http://127.0.0.1:8080/healthz || exit 1'
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    labels:
+      - coolify.traefik.middlewares=authentik-auth@file
+  valkey:
+    image: 'docker.io/valkey/valkey:8-alpine'
+    restart: unless-stopped
+    command: 'valkey-server --save 30 1 --loglevel warning'
+    expose:
+      - '6379'
+    volumes:
+      - 'valkey-data:/data'
+    healthcheck:
+      test:
+        - CMD
+        - valkey-cli
+        - ping
+      interval: 5s
+      timeout: 5s
+      retries: 5
+  # Stealth browser backend. The image (jo-inc/camofox-browser) and the CAMOFOX_*
+  # variables are upstream literals spelled without "u"; the service/volume name
+  # uses the correct engine spelling "camoufox".
+  camoufox:
+    image: 'ghcr.io/jo-inc/camofox-browser:${CAMOFOX_IMAGE_TAG:-latest}'
+    restart: unless-stopped
+    expose:
+      - '9377'
+    environment:
+      - CAMOFOX_PORT=9377
+      - PORT=9377
+      - CAMOFOX_PROFILE_DIR=/root/.camofox/profiles
+      - CAMOFOX_COOKIES_DIR=/root/.camofox/cookies
+      - CAMOFOX_TRACES_DIR=/root/.camofox/traces
+      - 'MAX_OLD_SPACE_SIZE=${CAMOFOX_MAX_OLD_SPACE_SIZE:-1024}'
+      - 'MAX_SESSIONS=${CAMOFOX_MAX_SESSIONS:-10}'
+      - 'MAX_TABS_PER_SESSION=${CAMOFOX_MAX_TABS_PER_SESSION:-5}'
+      - 'SESSION_TIMEOUT_MS=${CAMOFOX_SESSION_TIMEOUT_MS:-1800000}'
+      - 'BROWSER_IDLE_TIMEOUT_MS=${CAMOFOX_BROWSER_IDLE_TIMEOUT_MS:-300000}'
+      - 'CAMOFOX_CRASH_REPORT_ENABLED=${CAMOFOX_CRASH_REPORT_ENABLED:-false}'
+      - ENABLE_VNC=0
+    volumes:
+      - 'camoufox-data:/root/.camofox'
+    shm_size: 1gb
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - 'curl -fsS http://127.0.0.1:9377/health >/dev/null || exit 1'
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 120s
+  hermes:
+    image: 'nousresearch/hermes-agent:${HERMES_VERSION:-latest}'
+    restart: unless-stopped
+    command: 'gateway run'
+    expose:
+      - '8642'
+    volumes:
+      - 'hermes-data:/opt/data'
+    environment:
+      - API_SERVER_ENABLED=true
+      - API_SERVER_HOST=0.0.0.0
+      - API_SERVER_PORT=8642
+      - 'API_SERVER_KEY=${HERMES_API_SERVER_KEY:?Set HERMES_API_SERVER_KEY in Coolify}'
+      - API_SERVER_MODEL_NAME=hermes-local-gemma4
+      - HERMES_API_TIMEOUT=1800
+      - HERMES_STREAM_READ_TIMEOUT=1800
+      # Tool wiring. SEARXNG_URL / CAMOFOX_URL are the exact upstream env names.
+      - 'SEARXNG_URL=http://searxng:8080'
+      - 'CAMOFOX_URL=http://camoufox:9377'
+    shm_size: 1gb
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - 'python3 -c "import urllib.request; urllib.request.urlopen(''http://127.0.0.1:8642/health'', timeout=3).read()"'
+      interval: 30s
+      timeout: 5s
+      retries: 10
+      start_period: 90s
+    mem_limit: 4g
+    mem_reservation: 1g
+    cpus: '2.0'
+  hermes-dashboard:
+    image: 'nousresearch/hermes-agent:${HERMES_VERSION:-latest}'
+    restart: unless-stopped
+    command: 'dashboard --host 0.0.0.0 --port 9119 --no-open --insecure'
+    expose:
+      - '9119'
+    ports:
+      - '9119:9119'
+    volumes:
+      - 'hermes-data:/opt/data'
+    environment:
+      - 'GATEWAY_HEALTH_URL=http://hermes:8642'
+      - GATEWAY_HEALTH_TIMEOUT=5
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - 'python3 -c "import urllib.request; urllib.request.urlopen(''http://127.0.0.1:9119/api/status'', timeout=3).read()"'
+      interval: 30s
+      timeout: 5s
+      retries: 10
+      start_period: 60s
+    mem_limit: 512m
+    mem_reservation: 128m
+    cpus: '0.5'
+    labels:
+      - traefik.http.middlewares.authentik-auth@file
+volumes:
+  hermes-data: null
+  ollama-data: null
+  camoufox-data: null
+  searxng-cache: null
+  valkey-data: null

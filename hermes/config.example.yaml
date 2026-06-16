@@ -1,0 +1,14 @@
+# Example Hermes Agent config.
+# Copy into the Hermes data dir as config.yaml (container path /opt/data/config.yaml)
+# or mount it via docker-compose (see the commented volume in docker-compose.yml).
+# Authoritative reference: https://hermes-agent.nousresearch.com/docs/user-guide/configuration
+
+# Web search / extract backends.
+web:
+  backend: "searxng"            # shared fallback backend
+  search_backend: "searxng"     # used by web_search   -> reads SEARXNG_URL
+  extract_backend: "firecrawl"  # used by web_extract  -> needs Firecrawl (NOT bundled);
+                                # alternatives: tavily | exa | parallel
+
+# Browser automation routes through Camoufox automatically when CAMOFOX_URL is set
+# (see docker-compose.yml / .env). No extra config is required here for the browser tool.
