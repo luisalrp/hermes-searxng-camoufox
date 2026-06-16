@@ -24,10 +24,10 @@ pages. The Hermes skill that encodes this policy lives in
 | **valkey** | `valkey/valkey` | Cache/queue for SearXNG (Redis fork) | 6379 |
 | **camoufox** | `ghcr.io/jo-inc/camofox-browser` | Stealth browser automation — the *browse* layer | 9377 |
 
-> **On the spelling:** the browser engine is **Camoufox** (with a "u"). The upstream Docker image
-> (`jo-inc/camofox-browser`) and its environment variables (`CAMOFOX_*`) are spelled **without** the
-> "u" — that is the maintainer's literal naming, so this repo keeps those identifiers verbatim while
-> using "Camoufox" everywhere else.
+> **On the spelling:** the browser *engine* is **Camoufox** (with a "u", by daijro). Everything in
+> jo-inc's server is spelled **without** the "u" — the Docker image (`jo-inc/camofox-browser`), its
+> env vars (`CAMOFOX_*`), and the Hermes provider name and config key (`browser.camofox`,
+> `CAMOFOX_URL`). This repo keeps those identifiers verbatim and uses "Camoufox" only for the engine.
 
 > **Firecrawl is not bundled.** Hermes' `web_extract` defaults to Firecrawl, which this compose does
 > not run. See [Wiring & gaps](#wiring--gaps).
@@ -78,7 +78,7 @@ All settings live in `.env` (see `.env.example` for the full list with comments)
 |---|---|
 | `SEARXNG_SECRET` | **Required.** SearXNG secret key (`openssl rand -hex 32`). |
 | `HERMES_API_SERVER_KEY` | **Required.** Auth key for the Hermes API server. |
-| `CAMOFOX_IMAGE_TAG` | Browser image tag — pin a real one from the [releases](https://github.com/jo-inc/camofox-browser/releases) (tags are arch-suffixed). |
+| `CAMOFOX_IMAGE_TAG` | Browser image tag. Published GHCR tags are app semver (e.g. `1.11.2`) or `latest`, multi-arch (amd64/arm64). Pin a version for reproducibility. |
 | `SEARXNG_PORT` / `HERMES_API_PORT` | Host ports for the generic compose. |
 
 ### Hermes tool wiring
@@ -113,7 +113,9 @@ This stack is explicit about what it does and does not include:
   OpenAI-compatible / Ollama endpoint) and set the provider variables your Hermes version expects
   per the [docs](https://hermes-agent.nousresearch.com/docs/user-guide/configuration). Commented
   placeholders are in `docker-compose.yml` and `.env.example`.
-- **Pin the Camoufox image tag** — `latest` may not resolve on GHCR; tags are arch-suffixed (e.g. `135.0.1-aarch64`).
+- **Camofox auth: leave `CAMOFOX_ACCESS_KEY` unset here.** Hermes calls Camofox's REST API unauthenticated (it only reads `CAMOFOX_URL`), so a global access key would reject every browser call. This compose keeps Camofox on the internal network only (not published to the host). `CAMOFOX_API_KEY` (cookie import) and `CAMOFOX_ADMIN_KEY` (`/stop`) are separate and safe to set.
+- **Pin the image tag for Hermes compatibility.** `ghcr.io/jo-inc/camofox-browser` publishes multi-arch app-semver tags (e.g. `1.11.2`) plus `latest`; pin a version so the Camofox API/persistence behaviour Hermes relies on doesn't drift. (The `135.0.1-<arch>` form is only the local `make` build tag, not a GHCR tag.)
+- **Persistent browser sessions** need `browser.camofox.managed_persistence: true` in Hermes' `config.yaml` (note: `camofox`, no "u") **and** a Camofox build that honours per-`userId` profiles — see [`hermes/config.example.yaml`](hermes/config.example.yaml).
 
 ## The skill
 

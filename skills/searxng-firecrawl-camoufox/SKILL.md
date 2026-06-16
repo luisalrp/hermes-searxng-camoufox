@@ -122,7 +122,7 @@ Optional Camoufox persistence:
 
 ```yaml
 browser:
-  camoufox:
+  camofox:
     managed_persistence: true
 ```
 
