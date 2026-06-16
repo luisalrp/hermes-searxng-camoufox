@@ -23,7 +23,6 @@ pages. The Hermes skill that encodes this policy lives in
 | **searxng** | `searxng/searxng` | Metasearch — the *search* layer | 8080 |
 | **valkey** | `valkey/valkey` | Cache/queue for SearXNG (Redis fork) | 6379 |
 | **camoufox** | `ghcr.io/jo-inc/camofox-browser` | Stealth browser automation — the *browse* layer | 9377 |
-| **ollama** | `ollama/ollama` | Local LLM runtime | 11434 |
 
 > **On the spelling:** the browser engine is **Camoufox** (with a "u"). The upstream Docker image
 > (`jo-inc/camofox-browser`) and its environment variables (`CAMOFOX_*`) are spelled **without** the
@@ -33,6 +32,9 @@ pages. The Hermes skill that encodes this policy lives in
 > **Firecrawl is not bundled.** Hermes' `web_extract` defaults to Firecrawl, which this compose does
 > not run. See [Wiring & gaps](#wiring--gaps).
 
+> **No LLM is bundled.** Hermes needs an LLM provider — bring your own (a cloud API or an external
+> OpenAI-compatible / Ollama endpoint). See [Wiring & gaps](#wiring--gaps).
+
 ## Two compose files
 
 - **`docker-compose.yml`** — generic / portable. Publishes ports and reads a plain `.env`. Use this for a normal `docker compose up`.
@@ -40,8 +42,8 @@ pages. The Hermes skill that encodes this policy lives in
 
 ## Quick start (generic)
 
-Requirements: Docker + Compose v2, and enough RAM for your Ollama model (the default `gemma4:e4b`
-wants roughly 16 GB).
+Requirements: Docker + Compose v2, and an LLM provider for Hermes (a cloud API or an external
+OpenAI-compatible / Ollama endpoint — none is bundled).
 
 ```bash
 # 1. Configure
@@ -49,12 +51,10 @@ cp .env.example .env
 # Generate the two required secrets and put them in .env:
 #   SEARXNG_SECRET        ->  openssl rand -hex 32
 #   HERMES_API_SERVER_KEY ->  openssl rand -hex 32
+# Also set your LLM provider vars in .env (Hermes needs an LLM; none is bundled).
 
 # 2. Boot the stack
 docker compose up -d
-
-# 3. Pull the Ollama model (it is NOT downloaded automatically)
-docker compose exec ollama ollama pull gemma4:e4b
 ```
 
 Verify:
@@ -78,7 +78,6 @@ All settings live in `.env` (see `.env.example` for the full list with comments)
 |---|---|
 | `SEARXNG_SECRET` | **Required.** SearXNG secret key (`openssl rand -hex 32`). |
 | `HERMES_API_SERVER_KEY` | **Required.** Auth key for the Hermes API server. |
-| `OLLAMA_MODEL` | Ollama model tag (default `gemma4:e4b`). Pull it after boot. |
 | `CAMOFOX_IMAGE_TAG` | Browser image tag — pin a real one from the [releases](https://github.com/jo-inc/camofox-browser/releases) (tags are arch-suffixed). |
 | `SEARXNG_PORT` / `HERMES_API_PORT` | Host ports for the generic compose. |
 
@@ -110,10 +109,10 @@ This stack is explicit about what it does and does not include:
 - **Firecrawl (extract) is not bundled.** Options: (a) [self-host Firecrawl](https://github.com/firecrawl/firecrawl/blob/main/SELF_HOST.md)
   (port 3002) and set `FIRECRAWL_API_URL=http://firecrawl:3002` with `USE_DB_AUTHENTICATION=false`;
   (b) use Firecrawl cloud via `FIRECRAWL_API_KEY`; or (c) rely on SearXNG-only search and skip `web_extract`.
-- **Hermes ↔ Ollama LLM wiring is left to you.** The compose runs Ollama but does not assume your
-  Hermes version's provider variables. Point Hermes at `http://ollama:11434` per the Hermes docs
-  (commented placeholders are in `docker-compose.yml`).
-- **The Ollama model is not auto-pulled** — run the `ollama pull` step from the quick start.
+- **No LLM is bundled.** Hermes needs an LLM provider — bring your own (a cloud API or an external
+  OpenAI-compatible / Ollama endpoint) and set the provider variables your Hermes version expects
+  per the [docs](https://hermes-agent.nousresearch.com/docs/user-guide/configuration). Commented
+  placeholders are in `docker-compose.yml` and `.env.example`.
 - **Pin the Camoufox image tag** — `latest` may not resolve on GHCR; tags are arch-suffixed (e.g. `135.0.1-aarch64`).
 
 ## The skill
@@ -149,5 +148,4 @@ Use `docker-compose.coolify.yml`. It relies on Coolify features instead of publi
 [SearXNG](https://github.com/searxng/searxng) ·
 [camofox-browser](https://github.com/jo-inc/camofox-browser) (Camoufox) ·
 [Firecrawl](https://github.com/firecrawl/firecrawl) ·
-[Ollama](https://github.com/ollama/ollama) ·
 [Valkey](https://github.com/valkey-io/valkey)
